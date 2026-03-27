@@ -65,80 +65,83 @@
         });
     };
 
+
     function sauvegarder() {
         disquesDispos.forEach(p => {
-            const selectEl = document.getElementById('stock_' + p);
-            if (selectEl) {
-                localStorage.setItem('stock_' + p, selectEl.value);
-            }
+            const el = document.getElementById('stock_' + p);
+            if(el) localStorage.setItem('stock_' + p, el.value);
         });
     }
 
     function calculer() {
         sauvegarder();
-        const cible = parseFloat(document.getElementById('poidsCible').value);
-        const nbH = parseInt(document.getElementById('nbHalteres').value);
-        const diviseurCotes = 2 * nbH; // 2 côtés par haltère
         
-        let resteParCote = (cible - poidsBarre) / 2;
-        
-        if (resteParCote < 0) {
-            document.getElementById('resultat').innerText = "⚠️ Erreur : Le poids cible est inférieur au poids de la barre (2kg) !";
-            document.getElementById('resultat').style.color = "red";
+        let saisie = document.getElementById('poidsCible').value.replace(',', '.');
+        const cible = parseFloat(saisie);
+
+        if (isNaN(cible)) {
+            document.getElementById('resultat').innerText = "❌ Nombre invalide";
             return;
         }
 
-        document.getElementById('resultat').style.color = "#2c3e50";
+        const nbH = parseInt(document.getElementById('nbHalteres').value);
+        const diviseur = 2 * nbH;
+        let resteParCote = (cible - poidsBarre) / 2;
+        
+        if (resteParCote < 0) {
+            document.getElementById('resultat').innerText = "⚠️ Trop léger (Barre = 2kg)";
+            return;
+        }
+
         let composition = [];
         let sectionAchats = "";
 
         disquesDispos.forEach(p => {
-            const stockTotal = parseInt(document.getElementById('stock_' + p).value);
-            const besoinUnitaire = Math.floor(resteParCote / p);
-            const dispoUnitaire = Math.floor(stockTotal / diviseurCotes);
+            const stockVal = document.getElementById('stock_' + p).value;
+            const stockTotal = parseInt(stockVal);
             
-            const utilise = Math.min(besoinUnitaire, dispoUnitaire);
+            // Correction de précision pour les floats
+            let besoinUnitaire = Math.floor((resteParCote + 0.001) / p);
+            let dispoUnitaire = Math.floor(stockTotal / diviseur);
+            
+            let utilise = Math.min(besoinUnitaire, dispoUnitaire);
             if (utilise > 0) {
                 composition.push(`✅ ${utilise} x ${p}kg`);
-                // Mise à jour du reste avec précision
-                resteParCote = parseFloat((resteParCote - (utilise * p)).toFixed(2));
+                resteParCote = Number((resteParCote - (utilise * p)).toFixed(3));
             }
 
-            // Calcul du manque et des alternatives "OU"
-            const manqueUnitaire = besoinUnitaire - utilise;
-            if (manqueUnitaire > 0) {
-                const quantiteManquanteTotale = manqueUnitaire * diviseurCotes;
-                let ligneAchat = `\n❌ Acheter ${quantiteManquanteTotale} x ${p}kg`;
+            let manqueU = besoinUnitaire - utilise;
+            if (manqueU > 0) {
+                const totalManquant = manqueU * diviseur;
+                let ligne = `\n❌ Acheter ${totalManquant} x ${p}kg`;
                 
-                // Chercher les alternatives (OU x fois poids plus petits)
-                let alternatives = [];
+                let alts = [];
                 disquesDispos.filter(alt => alt < p).forEach(altP => {
-                    const nbAlt = (p * quantiteManquanteTotale) / altP;
-                    if (Number.isInteger(nbAlt)) {
-                        alternatives.push(`${nbAlt} x ${altP}kg`);
-                    }
+                    let ratio = p / altP;
+                    let nbAlt = totalManquant * ratio;
+                    if (Number.isInteger(nbAlt)) alts.push(`${nbAlt} x ${altP}kg`);
                 });
 
-                if (alternatives.length > 0) {
-                    ligneAchat += ` (OU ${alternatives.join(' OU ')})`;
-                }
-                
-                sectionAchats += ligneAchat;
-                // On simule l'achat pour continuer le calcul vers les poids plus petits
-                resteParCote = parseFloat((resteParCote - (manqueUnitaire * p)).toFixed(2));
+                if (alts.length > 0) ligne += ` (OU ${alts.join(' OU ')})`;
+                sectionAchats += ligne;
+                resteParCote = Number((resteParCote - (manqueU * p)).toFixed(3));
             }
         });
 
-        // Construction du message final
-        let finalTxt = `--- MONTAGE PAR CÔTÉ ---\n` + (composition.length > 0 ? composition.join('\n') : "Barre à vide");
+        let final = `--- PAR CÔTÉ ---\n`;
+        final += (composition.length > 0 ? composition.join('\n') : "Barre vide");
         
+        if (resteParCote > 0) {
+            final += `\n\n⚠️ Reste imbattable : ${resteParCote}kg`;
+        }
+
         if (sectionAchats !== "") {
-            finalTxt += `\n\n🛒 CONSEIL D'ACHAT :` + sectionAchats;
-        } else {
-            finalTxt += `\n\n✨ Ton stock est suffisant !`;
+            final += `\n\n🛒 CONSEIL D'ACHAT :` + sectionAchats;
+        } else if (resteParCote <= 0) {
+            final += `\n\n✨ Stock complet !`;
         }
         
-        document.getElementById('resultat').innerText = finalTxt;
+        document.getElementById('resultat').innerText = final;
     }
 </script>
 
