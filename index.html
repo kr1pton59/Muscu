@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mon Calculateur d'Haltères</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #eef2f3; display: flex; justify-content: center; padding: 20px; }
+        .card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 8px 20px rgba(0,0,0,0.15); width: 100%; max-width: 450px; }
+        h2 { text-align: center; color: #2c3e50; margin-top: 0; }
+        .section { margin-bottom: 20px; border-bottom: 2px solid #f0f0f0; padding-bottom: 15px; }
+        .section-title { font-weight: bold; color: #34495e; display: block; margin-bottom: 10px; }
+        label { display: block; margin: 10px 0 5px; font-size: 0.9em; color: #7f8c8d; }
+        select, input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 10px; box-sizing: border-box; font-size: 16px; }
+        button { width: 100%; padding: 15px; background: #27ae60; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.3s; }
+        button:hover { background: #1e8449; }
+        #resultat { margin-top: 20px; padding: 15px; background: #fdfdfd; border: 1px solid #eee; border-radius: 10px; white-space: pre-wrap; line-height: 1.6; font-family: 'Consolas', monospace; font-size: 14px; color: #2c3e50; }
+        .item-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .item-row select { width: 90px; margin-bottom: 0; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>🏋️ Calculateur haltères 🏋️</h2>
+
+    <div class="section">
+        <span class="section-title">📦 Mon Stock de Disques</span>
+        <div id="stock-container"></div>
+    </div>
+
+    <div class="section">
+        <span class="section-title">⚙️ Réglages Séance</span>
+        <label>Nombre d'haltères</label>
+        <select id="nbHalteres">
+            <option value="1">1 seul haltère</option>
+            <option value="2" selected>Une paire (2)</option>
+        </select>
+
+        <label>Poids total visé par haltère (kg)</label>
+        <input type="number" id="poidsCible" value="12" step="0.5">
+    </div>
+
+    <button onclick="calculer()">CALCULER LA CONFIGURATION</button>
+
+    <div id="resultat">Appuie sur Calculer pour voir le montage...</div>
+</div>
+
+<script>
+    const disquesDispos = [5, 2, 1, 0.5];
+    const poidsBarre = 2.0;
+
+    // 1. Générer les menus déroulants pour le stock au chargement
+    window.onload = function() {
+        const container = document.getElementById('stock-container');
+        disquesDispos.forEach(p => {
+            const savedVal = localStorage.getItem('stock_' + p) || "4";
+            container.innerHTML += `
+                <div class="item-row">
+                    <span>Disque de <strong>${p} kg</strong></span>
+                    <select id="stock_${p}" onchange="sauvegarder()">
+                        ${Array.from({length: 31}, (_, i) => `<option value="${i}" ${i == savedVal ? 'selected' : ''}>${i}</option>`).join('')}
+                    </select>
+                </div>`;
+        });
+    };
+
+    function sauvegarder() {
+        disquesDispos.forEach(p => {
+            const selectEl = document.getElementById('stock_' + p);
+            if (selectEl) {
+                localStorage.setItem('stock_' + p, selectEl.value);
+            }
+        });
+    }
+
+    function calculer() {
+        sauvegarder();
+        const cible = parseFloat(document.getElementById('poidsCible').value);
+        const nbH = parseInt(document.getElementById('nbHalteres').value);
+        const diviseurCotes = 2 * nbH; // 2 côtés par haltère
+        
+        let resteParCote = (cible - poidsBarre) / 2;
+        
+        if (resteParCote < 0) {
+            document.getElementById('resultat').innerText = "⚠️ Erreur : Le poids cible est inférieur au poids de la barre (2kg) !";
+            document.getElementById('resultat').style.color = "red";
+            return;
+        }
+
+        document.getElementById('resultat').style.color = "#2c3e50";
+        let composition = [];
+        let sectionAchats = "";
+
+        disquesDispos.forEach(p => {
+            const stockTotal = parseInt(document.getElementById('stock_' + p).value);
+            const besoinUnitaire = Math.floor(resteParCote / p);
+            const dispoUnitaire = Math.floor(stockTotal / diviseurCotes);
+            
+            const utilise = Math.min(besoinUnitaire, dispoUnitaire);
+            if (utilise > 0) {
+                composition.push(`✅ ${utilise} x ${p}kg`);
+                // Mise à jour du reste avec précision
+                resteParCote = parseFloat((resteParCote - (utilise * p)).toFixed(2));
+            }
+
+            // Calcul du manque et des alternatives "OU"
+            const manqueUnitaire = besoinUnitaire - utilise;
+            if (manqueUnitaire > 0) {
+                const quantiteManquanteTotale = manqueUnitaire * diviseurCotes;
+                let ligneAchat = `\n❌ Acheter ${quantiteManquanteTotale} x ${p}kg`;
+                
+                // Chercher les alternatives (OU x fois poids plus petits)
+                let alternatives = [];
+                disquesDispos.filter(alt => alt < p).forEach(altP => {
+                    const nbAlt = (p * quantiteManquanteTotale) / altP;
+                    if (Number.isInteger(nbAlt)) {
+                        alternatives.push(`${nbAlt} x ${altP}kg`);
+                    }
+                });
+
+                if (alternatives.length > 0) {
+                    ligneAchat += ` (OU ${alternatives.join(' OU ')})`;
+                }
+                
+                sectionAchats += ligneAchat;
+                // On simule l'achat pour continuer le calcul vers les poids plus petits
+                resteParCote = parseFloat((resteParCote - (manqueUnitaire * p)).toFixed(2));
+            }
+        });
+
+        // Construction du message final
+        let finalTxt = `--- MONTAGE PAR CÔTÉ ---\n` + (composition.length > 0 ? composition.join('\n') : "Barre à vide");
+        
+        if (sectionAchats !== "") {
+            finalTxt += `\n\n🛒 CONSEIL D'ACHAT :` + sectionAchats;
+        } else {
+            finalTxt += `\n\n✨ Ton stock est suffisant !`;
+        }
+        
+        document.getElementById('resultat').innerText = finalTxt;
+    }
+</script>
+
+</body>
+</html>
